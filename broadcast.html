@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Broadcast Camera</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Broadcast</h1>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">Not broadcasting</span></div>
+  </header>
+  <div class="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="placeholder" id="placeholder">Press Start to share this Mac's camera with viewers of the main page.</div>
+  </div>
+  <button id="toggle">Start broadcasting</button>
+  <div class="meta" id="viewers">0 viewers</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const video = document.getElementById("video");
+    const placeholder = document.getElementById("placeholder");
+    const status = document.getElementById("status");
+    const statusText = document.getElementById("statusText");
+    const toggle = document.getElementById("toggle");
+    const viewersEl = document.getElementById("viewers");
+
+    let stream = null;
+    let peer = null;
+    const calls = new Map();
+
+    function setStatus(text, live) {
+      statusText.textContent = text;
+      status.classList.toggle("live", !!live);
+    }
+
+    function updateViewers() {
+      viewersEl.textContent = calls.size + (calls.size === 1 ? " viewer" : " viewers");
+    }
+
+    async function start() {
+      toggle.disabled = true;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+      } catch (e) {
+        setStatus("Camera blocked: " + e.name);
+        toggle.disabled = false;
+        return;
+      }
+      video.srcObject = stream;
+      placeholder.style.display = "none";
+
+      peer = new Peer(STREAM_ID);
+      peer.on("open", () => {
+        setStatus("Live", true);
+        toggle.textContent = "Stop broadcasting";
+        toggle.classList.add("stop");
+        toggle.disabled = false;
+      });
+
+      // Each viewer opens a data connection; we call them back with the video.
+      peer.on("connection", conn => {
+        conn.on("open", () => {
+          const call = peer.call(conn.peer, stream);
+          calls.set(conn.peer, call);
+          updateViewers();
+          const drop = () => { calls.delete(conn.peer); updateViewers(); };
+          call.on("close", drop);
+          conn.on("close", () => { call.close(); drop(); });
+        });
+      });
+
+      peer.on("disconnected", () => peer.reconnect());
+      peer.on("error", err => {
+        if (err.type === "unavailable-id") {
+          setStatus("Already broadcasting in another tab");
+          stop();
+        } else if (err.type !== "peer-unavailable") {
+          setStatus("Error: " + err.type);
+        }
+      });
+    }
+
+    function stop() {
+      calls.forEach(c => c.close());
+      calls.clear();
+      updateViewers();
+      if (peer) { peer.destroy(); peer = null; }
+      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      video.srcObject = null;
+      placeholder.style.display = "";
+      toggle.textContent = "Start broadcasting";
+      toggle.classList.remove("stop");
+      toggle.disabled = false;
+      if (!statusText.textContent.startsWith("Already")) setStatus("Not broadcasting");
+    }
+
+    toggle.addEventListener("click", () => (peer ? stop() : start()));
+    window.addEventListener("beforeunload", stop);
+  </script>
+</body>
+</html>
