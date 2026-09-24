@@ -7,7 +7,7 @@
   <title>Broadcast Camera</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@500&display=swap">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
   <header>
@@ -17,7 +17,7 @@
   <div class="stage">
     <video id="video" autoplay playsinline muted></video>
     <div class="placeholder" id="placeholder"></div>
-    <div class="overlay" id="overlay"></div>
+    <div class="overlays" id="overlay"></div>
   </div>
   <div class="editor">
     <label>Text
@@ -29,6 +29,10 @@
     <label>Colour
       <input type="color" id="oColor">
     </label>
+    <label>Height above head
+      <div class="row"><input type="range" id="oHeight" min="-0.3" max="1" step="0.05"><span id="oHeightVal"></span></div>
+    </label>
+    <button type="button" class="toggle3d" id="o3d">3D text</button>
     <label class="toggle"><input type="checkbox" id="oVisible"> Show text</label>
     <label class="toggle"><input type="checkbox" id="oFollow"> Follow head</label>
     <div class="hint" id="trackStatus"></div>
@@ -38,8 +42,8 @@
   <div class="meta" id="startHint">Press Start to share this Mac's camera with viewers of the main page.</div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="config.js?v=6"></script>
-  <script src="overlay.js?v=6"></script>
+  <script src="config.js?v=7"></script>
+  <script src="overlay.js?v=7"></script>
   <script>
     const video = document.getElementById("video");
     const placeholder = document.getElementById("placeholder");
@@ -54,19 +58,26 @@
     const oSize = document.getElementById("oSize");
     const oSizeVal = document.getElementById("oSizeVal");
     const oColor = document.getElementById("oColor");
+    const oHeight = document.getElementById("oHeight");
+    const oHeightVal = document.getElementById("oHeightVal");
+    const o3d = document.getElementById("o3d");
     const oVisible = document.getElementById("oVisible");
     const oFollow = document.getElementById("oFollow");
     const conns = new Set();
+    const ov = createOverlay(overlay, video);
 
-    let overlayState = { type: "overlay", text: "hello world", size: 8, color: "#ffffff", visible: true, follow: true };
+    let overlayState = {
+      type: "overlay", text: "hello world", size: 8, color: "#ffffff",
+      visible: true, follow: true, height: 0.15, depth: false,
+    };
     try { Object.assign(overlayState, JSON.parse(localStorage.getItem("overlay") || "{}")); } catch {}
 
     function renderOverlay() {
-      overlay.textContent = overlayState.text;
-      overlay.style.fontSize = overlayState.size + "cqw";
-      overlay.style.color = overlayState.color;
-      overlay.hidden = !overlayState.visible;
+      ov.setStyle(overlayState);
       oSizeVal.textContent = overlayState.size;
+      oHeightVal.textContent = overlayState.height.toFixed(2);
+      o3d.classList.toggle("on", overlayState.depth);
+      o3d.textContent = overlayState.depth ? "3D text: on" : "3D text: off";
     }
 
     function onEdit() {
@@ -77,6 +88,8 @@
         color: oColor.value,
         visible: oVisible.checked,
         follow: oFollow.checked,
+        height: Number(oHeight.value),
+        depth: overlayState.depth,
       };
       renderOverlay();
       try { localStorage.setItem("overlay", JSON.stringify(overlayState)); } catch {}
@@ -86,21 +99,23 @@
     oText.value = overlayState.text;
     oSize.value = overlayState.size;
     oColor.value = overlayState.color;
+    oHeight.value = overlayState.height;
     oVisible.checked = overlayState.visible;
     oFollow.checked = overlayState.follow;
-    [oText, oSize, oColor, oVisible, oFollow].forEach(el => el.addEventListener("input", onEdit));
+    [oText, oSize, oColor, oHeight, oVisible, oFollow].forEach(el => el.addEventListener("input", onEdit));
+    o3d.addEventListener("click", () => { overlayState.depth = !overlayState.depth; onEdit(); });
     renderOverlay();
 
-    // Head tracking (tracking.js) reports where to anchor the text; viewers get it ~15x a second.
-    const ov = createOverlay(overlay, video);
+    // Head tracking (tracking.js) reports every head it sees; viewers get them ~15x a second.
+    window.headLift = () => overlayState.height;
     let lastSent = 0;
-    window.onHeadPosition = pos => {
-      const head = overlayState.follow ? pos : null;
-      ov.setTarget(head);
+    window.onHeads = found => {
+      const heads = overlayState.follow ? found : null;
+      ov.setHeads(heads);
       const now = performance.now();
       if (now - lastSent < 66) return;
       lastSent = now;
-      conns.forEach(c => c.open && c.send({ type: "pos", head }));
+      conns.forEach(c => c.open && c.send({ type: "heads", heads }));
     };
 
     let stream = null;
@@ -177,7 +192,7 @@
       toggle.textContent = "Start broadcasting";
       toggle.classList.remove("stop");
       document.getElementById("startHint").hidden = false;
-      ov.setTarget(null);
+      ov.setHeads(null);
       toggle.disabled = false;
       if (!statusText.textContent.startsWith("Already")) setStatus("Not broadcasting");
     }
@@ -185,6 +200,6 @@
     toggle.addEventListener("click", () => (peer ? stop() : start()));
     window.addEventListener("beforeunload", stop);
   </script>
-  <script type="module" src="tracking.js?v=6"></script>
+  <script type="module" src="tracking.js?v=7"></script>
 </body>
 </html>

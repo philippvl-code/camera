@@ -63,6 +63,7 @@ button.stop { background: var(--live); color: #fff; }
   left: 0;
   top: 0;
   transform-origin: 50% 100%;
+  transform-style: preserve-3d;
   will-change: transform;
   pointer-events: none;
   font-family: Futura, "Futura PT", "Jost", "Century Gothic", sans-serif;
@@ -95,5 +96,10 @@ button.stop { background: var(--live); color: #fff; }
 .editor .row { display: flex; gap: 8px; align-items: center; }
 .editor .row span { font-size: 13px; color: var(--fg); min-width: 3ch; text-align: right; }
 .editor .toggle { display: flex; gap: 8px; align-items: center; text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--fg); }
-.overlay[hidden] { display: none; }
+.overlays { position: absolute; inset: 0; pointer-events: none; }
+.overlays[hidden] { display: none; }
+.overlay span { display: block; }
+.overlay span.back { position: absolute; left: 0; top: 0; text-shadow: none; }
+.editor button.toggle3d { background: var(--bg); color: var(--fg); border: 1px solid #2a2a2e; }
+.editor button.toggle3d.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .editor .hint { font-size: 12px; color: var(--muted); grid-column: 1 / -1; }

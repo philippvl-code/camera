@@ -6,7 +6,7 @@
   <title>Live Camera</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@500&display=swap">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
   <header>
@@ -16,12 +16,12 @@
   <div class="stage">
     <video id="video" autoplay playsinline muted></video>
     <div class="placeholder" id="placeholder">Waiting for the stream…</div>
-    <div class="overlay" id="overlay" hidden></div>
+    <div class="overlays" id="overlay" hidden></div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="config.js?v=6"></script>
-  <script src="overlay.js?v=6"></script>
+  <script src="config.js?v=7"></script>
+  <script src="overlay.js?v=7"></script>
   <script>
     const video = document.getElementById("video");
     const placeholder = document.getElementById("placeholder");
@@ -29,14 +29,8 @@
     const statusText = document.getElementById("statusText");
     const overlay = document.getElementById("overlay");
 
-    function applyOverlay(o) {
-      overlay.textContent = o.text;
-      overlay.style.fontSize = o.size + "cqw";
-      overlay.style.color = o.color;
-      overlay.hidden = !o.visible || !video.srcObject;
-    }
-    let overlayState = null;
     const ov = createOverlay(overlay, video);
+    ov.setActive(false);
 
     function setStatus(text, live) {
       statusText.textContent = text;
@@ -45,7 +39,8 @@
 
     function showOffline() {
       video.srcObject = null;
-      overlay.hidden = true;
+      ov.setActive(false);
+      ov.setHeads(null);
       placeholder.style.display = "";
       placeholder.textContent = "The camera is offline right now. This page reconnects on its own.";
       setStatus("Offline");
@@ -61,8 +56,8 @@
       const conn = peer.connect(STREAM_ID, { reliable: true });
       conn.on("data", msg => {
         if (!msg) return;
-        if (msg.type === "overlay") { overlayState = msg; applyOverlay(msg); }
-        if (msg.type === "pos") ov.setTarget(msg.head);
+        if (msg.type === "overlay") ov.setStyle(msg);
+        if (msg.type === "heads") ov.setHeads(msg.heads);
       });
       conn.on("close", () => { showOffline(); scheduleRetry(); });
       conn.on("error", () => { showOffline(); scheduleRetry(); });
@@ -81,7 +76,7 @@
         video.srcObject = stream;
         placeholder.style.display = "none";
         setStatus("Live", true);
-        if (overlayState) applyOverlay(overlayState);
+        ov.setActive(true);
       });
       call.on("close", () => { showOffline(); scheduleRetry(); });
     });
