@@ -7,7 +7,7 @@
   <title>Broadcast Camera</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@500&display=swap">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <header>
@@ -30,13 +30,16 @@
       <input type="color" id="oColor">
     </label>
     <label class="toggle"><input type="checkbox" id="oVisible"> Show text</label>
+    <label class="toggle"><input type="checkbox" id="oFollow"> Follow head</label>
+    <div class="hint" id="trackStatus"></div>
   </div>
   <button id="toggle">Start broadcasting</button>
   <div class="meta" id="viewers">0 viewers</div>
-  <div class="meta">Press Start to share this Mac's camera with viewers of the main page.</div>
+  <div class="meta" id="startHint">Press Start to share this Mac's camera with viewers of the main page.</div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="config.js"></script>
+  <script src="config.js?v=6"></script>
+  <script src="overlay.js?v=6"></script>
   <script>
     const video = document.getElementById("video");
     const placeholder = document.getElementById("placeholder");
@@ -52,9 +55,10 @@
     const oSizeVal = document.getElementById("oSizeVal");
     const oColor = document.getElementById("oColor");
     const oVisible = document.getElementById("oVisible");
+    const oFollow = document.getElementById("oFollow");
     const conns = new Set();
 
-    let overlayState = { type: "overlay", text: "hello world", size: 8, color: "#ffffff", visible: true };
+    let overlayState = { type: "overlay", text: "hello world", size: 8, color: "#ffffff", visible: true, follow: true };
     try { Object.assign(overlayState, JSON.parse(localStorage.getItem("overlay") || "{}")); } catch {}
 
     function renderOverlay() {
@@ -72,6 +76,7 @@
         size: Number(oSize.value),
         color: oColor.value,
         visible: oVisible.checked,
+        follow: oFollow.checked,
       };
       renderOverlay();
       try { localStorage.setItem("overlay", JSON.stringify(overlayState)); } catch {}
@@ -82,8 +87,21 @@
     oSize.value = overlayState.size;
     oColor.value = overlayState.color;
     oVisible.checked = overlayState.visible;
-    [oText, oSize, oColor, oVisible].forEach(el => el.addEventListener("input", onEdit));
+    oFollow.checked = overlayState.follow;
+    [oText, oSize, oColor, oVisible, oFollow].forEach(el => el.addEventListener("input", onEdit));
     renderOverlay();
+
+    // Head tracking (tracking.js) reports where to anchor the text; viewers get it ~15x a second.
+    const ov = createOverlay(overlay, video);
+    let lastSent = 0;
+    window.onHeadPosition = pos => {
+      const head = overlayState.follow ? pos : null;
+      ov.setTarget(head);
+      const now = performance.now();
+      if (now - lastSent < 66) return;
+      lastSent = now;
+      conns.forEach(c => c.open && c.send({ type: "pos", head }));
+    };
 
     let stream = null;
     let peer = null;
@@ -118,6 +136,7 @@
         setStatus("Live", true);
         toggle.textContent = "Stop broadcasting";
         toggle.classList.add("stop");
+        document.getElementById("startHint").hidden = true;
         toggle.disabled = false;
       });
 
@@ -157,6 +176,8 @@
       placeholder.style.display = "";
       toggle.textContent = "Start broadcasting";
       toggle.classList.remove("stop");
+      document.getElementById("startHint").hidden = false;
+      ov.setTarget(null);
       toggle.disabled = false;
       if (!statusText.textContent.startsWith("Already")) setStatus("Not broadcasting");
     }
@@ -164,5 +185,6 @@
     toggle.addEventListener("click", () => (peer ? stop() : start()));
     window.addEventListener("beforeunload", stop);
   </script>
+  <script type="module" src="tracking.js?v=6"></script>
 </body>
 </html>
