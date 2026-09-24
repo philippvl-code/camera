@@ -102,7 +102,7 @@
         const px = l.cur.f * style.size / 32;
         l.el.style.fontSize = px + "px";
         l.el.style.transform =
-          `translate(${l.cur.x}px, ${l.cur.y}px) translate(-50%, -100%) perspective(${px * 25}px) ` +
+          `translate(${l.cur.x}px, ${l.cur.y}px) translate(-50%, -82%) perspective(${px * 25}px) ` +
           `matrix3d(${m[0]},${m[1]},${m[2]},0,${m[3]},${m[4]},${m[5]},0,${m[6]},${m[7]},${m[8]},0,0,0,0,1)`;
       });
       requestAnimationFrame(frame);

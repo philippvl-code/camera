@@ -3,8 +3,9 @@
 // Results go to window.onHeads as a list of { x, y, s, m } (see headPose).
 //
 // MediaPipe's face detector is tuned for faces near the camera, so people further back
-// are missed on the full frame. We also scan overlapping square tiles (faces appear ~1.8x
-// larger there), one tile per frame in turn, and merge what they find.
+// are missed on the full frame. We also scan overlapping square tiles at two zoom levels
+// (faces appear ~1.8x and ~3.2x larger), a couple of tiles per frame in turn, and merge
+// what they find. Once a tile finds a face, MediaPipe keeps tracking it in that tile.
 import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
 const video = document.getElementById("video");
@@ -14,11 +15,12 @@ const MAX_FACES = 6;
 // MediaPipe face mesh landmark indices.
 const EYE_OUTER_R = 33, EYE_OUTER_L = 263, FOREHEAD = 10, CHIN = 152;
 
-const TILES = 3;
-const TILE_HOLD_FRAMES = TILES + 1;
+// Tile side lengths as a fraction of the frame height; each level overlaps ~25%.
+const TILE_LEVELS = [1, 0.55];
+const TILES_PER_FRAME = 2;
 
 let full = null;
-const tiles = [];            // { landmarker, faces, age }
+const tiles = [];            // { x, y, side (0..1 of height), landmarker, faces, age }
 let nextTile = 0;
 let lastVideoTime = -1;
 const tileCanvas = document.createElement("canvas");
@@ -40,7 +42,9 @@ async function init() {
       numFaces: MAX_FACES,
     });
     full = await make();
-    for (let i = 0; i < TILES; i++) tiles.push({ landmarker: await make(), faces: [], age: Infinity });
+    for (const t of tileLayout(video.videoWidth || 1280, video.videoHeight || 720)) {
+      tiles.push({ ...t, landmarker: await make(), faces: [], age: Infinity });
+    }
     trackStatus.textContent = "Face tracker ready";
   } catch (e) {
     trackStatus.textContent = "Face tracker failed to load";
@@ -86,19 +90,37 @@ function headPose(lm, height) {
   };
 }
 
+function tileLayout(vw, vh) {
+  const out = [];
+  for (const level of TILE_LEVELS) {
+    const side = vh * level;
+    const cols = Math.max(1, Math.ceil((vw - side) / (side * 0.75)) + 1);
+    const rows = Math.max(1, Math.ceil((vh - side) / (side * 0.75)) + 1);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        out.push({
+          x: cols > 1 ? (vw - side) * c / (cols - 1) / vw : 0,
+          y: rows > 1 ? (vh - side) * r / (rows - 1) / vh : 0,
+          side: level,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 // Run one tile and map its landmarks back into full-frame coordinates.
-function scanTile(i, vw, vh, now) {
-  const side = Math.min(vw, vh);
-  const x0 = TILES > 1 ? Math.round((vw - side) * i / (TILES - 1)) : 0;
-  tileCanvas.width = tileCanvas.height = side;
-  tileCtx.drawImage(video, x0, 0, side, side, 0, 0, side, side);
-  const res = tiles[i].landmarker.detectForVideo(tileCanvas, now);
-  tiles[i].faces = (res.faceLandmarks || []).map(f => f.map(p => ({
+function scanTile(t, vw, vh, now) {
+  const side = Math.round(t.side * vh), x0 = Math.round(t.x * vw), y0 = Math.round(t.y * vh);
+  if (tileCanvas.width !== side) tileCanvas.width = tileCanvas.height = side;
+  tileCtx.drawImage(video, x0, y0, side, side, 0, 0, side, side);
+  const res = t.landmarker.detectForVideo(tileCanvas, now);
+  t.faces = (res.faceLandmarks || []).map(f => f.map(p => ({
     x: (x0 + p.x * side) / vw,
-    y: (p.y * side) / vh,
+    y: (y0 + p.y * side) / vh,
     z: (p.z * side) / vw,
   })));
-  tiles[i].age = 0;
+  t.age = 0;
 }
 
 // Drop a face if one already found is in the same place (within half a face height).
@@ -119,12 +141,16 @@ function loop() {
     const now = performance.now();
     const res = full.detectForVideo(video, now);
 
-    scanTile(nextTile, vw, vh, now);
-    nextTile = (nextTile + 1) % TILES;
-    tiles.forEach(t => { if (t.age++ > TILE_HOLD_FRAMES) t.faces = []; });
+    for (let k = 0; k < TILES_PER_FRAME; k++) {
+      scanTile(tiles[nextTile], vw, vh, now);
+      nextTile = (nextTile + 1) % tiles.length;
+    }
+    // Forget a tile's faces if it hasn't been rescanned for a full cycle.
+    const hold = Math.ceil(tiles.length / TILES_PER_FRAME) + 1;
+    tiles.forEach(t => { if (t.age++ > hold) t.faces = []; });
 
     const faces = merge([res.faceLandmarks || [], ...tiles.map(t => t.faces)]);
-    const height = window.headLift ? window.headLift() : 0.15;
+    const height = window.headLift ? window.headLift() : 0.1;
     const heads = faces.map(f => headPose(f, height));
     trackStatus.textContent = heads.length
       ? `Tracking ${heads.length} ${heads.length === 1 ? "head" : "heads"}`
