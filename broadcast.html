@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>Broadcast Camera</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@500&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,7 +16,20 @@
   </header>
   <div class="stage">
     <video id="video" autoplay playsinline muted></video>
-    <div class="placeholder" id="placeholder">Press Start to share this Mac's camera with viewers of the main page.</div>
+    <div class="placeholder" id="placeholder" style="bottom: 12px">Press Start to share this Mac's camera with viewers of the main page.</div>
+    <div class="overlay" id="overlay"></div>
+  </div>
+  <div class="editor">
+    <label>Text
+      <input type="text" id="oText">
+    </label>
+    <label>Size
+      <div class="row"><input type="range" id="oSize" min="2" max="30" step="0.5"><span id="oSizeVal"></span></div>
+    </label>
+    <label>Colour
+      <input type="color" id="oColor">
+    </label>
+    <label class="toggle"><input type="checkbox" id="oVisible"> Show text</label>
   </div>
   <button id="toggle">Start broadcasting</button>
   <div class="meta" id="viewers">0 viewers</div>
@@ -28,6 +43,46 @@
     const statusText = document.getElementById("statusText");
     const toggle = document.getElementById("toggle");
     const viewersEl = document.getElementById("viewers");
+
+    // Overlay editor: settings are sent to every viewer over the data connection.
+    const overlay = document.getElementById("overlay");
+    const oText = document.getElementById("oText");
+    const oSize = document.getElementById("oSize");
+    const oSizeVal = document.getElementById("oSizeVal");
+    const oColor = document.getElementById("oColor");
+    const oVisible = document.getElementById("oVisible");
+    const conns = new Set();
+
+    let overlayState = { type: "overlay", text: "hello world", size: 8, color: "#ffffff", visible: true };
+    try { Object.assign(overlayState, JSON.parse(localStorage.getItem("overlay") || "{}")); } catch {}
+
+    function renderOverlay() {
+      overlay.textContent = overlayState.text;
+      overlay.style.fontSize = overlayState.size + "cqw";
+      overlay.style.color = overlayState.color;
+      overlay.hidden = !overlayState.visible;
+      oSizeVal.textContent = overlayState.size;
+    }
+
+    function onEdit() {
+      overlayState = {
+        type: "overlay",
+        text: oText.value,
+        size: Number(oSize.value),
+        color: oColor.value,
+        visible: oVisible.checked,
+      };
+      renderOverlay();
+      try { localStorage.setItem("overlay", JSON.stringify(overlayState)); } catch {}
+      conns.forEach(c => c.open && c.send(overlayState));
+    }
+
+    oText.value = overlayState.text;
+    oSize.value = overlayState.size;
+    oColor.value = overlayState.color;
+    oVisible.checked = overlayState.visible;
+    [oText, oSize, oColor, oVisible].forEach(el => el.addEventListener("input", onEdit));
+    renderOverlay();
 
     let stream = null;
     let peer = null;
@@ -68,12 +123,14 @@
       // Each viewer opens a data connection; we call them back with the video.
       peer.on("connection", conn => {
         conn.on("open", () => {
+          conns.add(conn);
+          conn.send(overlayState);
           const call = peer.call(conn.peer, stream);
           calls.set(conn.peer, call);
           updateViewers();
           const drop = () => { calls.delete(conn.peer); updateViewers(); };
           call.on("close", drop);
-          conn.on("close", () => { call.close(); drop(); });
+          conn.on("close", () => { conns.delete(conn); call.close(); drop(); });
         });
       });
 
@@ -91,6 +148,7 @@
     function stop() {
       calls.forEach(c => c.close());
       calls.clear();
+      conns.clear();
       updateViewers();
       if (peer) { peer.destroy(); peer = null; }
       if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }

@@ -55,3 +55,45 @@ button {
 }
 button.stop { background: var(--live); color: #fff; }
 .meta { font-size: 13px; color: var(--muted); }
+
+/* Text overlay */
+.stage { container-type: inline-size; }
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  font-family: Futura, "Futura PT", "Jost", "Century Gothic", sans-serif;
+  font-weight: 500;
+  text-align: center;
+  line-height: 1.1;
+  padding: 0 4cqw;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .35);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Overlay editor */
+.editor {
+  width: 100%;
+  max-width: 960px;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+.editor label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.editor input[type=text] {
+  font: inherit; font-size: 14px; color: var(--fg); background: var(--bg);
+  border: 1px solid #2a2a2e; border-radius: 8px; padding: 9px 10px;
+}
+.editor input[type=range] { width: 100%; accent-color: var(--fg); }
+.editor input[type=color] { width: 100%; height: 38px; border: 0; background: none; padding: 0; cursor: pointer; }
+.editor .row { display: flex; gap: 8px; align-items: center; }
+.editor .row span { font-size: 13px; color: var(--fg); min-width: 3ch; text-align: right; }
+.editor .toggle { display: flex; gap: 8px; align-items: center; text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--fg); }
+.overlay[hidden] { display: none; }

@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Live Camera</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@500&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,6 +16,7 @@
   <div class="stage">
     <video id="video" autoplay playsinline muted></video>
     <div class="placeholder" id="placeholder">Waiting for the stream…</div>
+    <div class="overlay" id="overlay" hidden></div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -23,6 +26,15 @@
     const placeholder = document.getElementById("placeholder");
     const status = document.getElementById("status");
     const statusText = document.getElementById("statusText");
+    const overlay = document.getElementById("overlay");
+
+    function applyOverlay(o) {
+      overlay.textContent = o.text;
+      overlay.style.fontSize = o.size + "cqw";
+      overlay.style.color = o.color;
+      overlay.hidden = !o.visible || !video.srcObject;
+    }
+    let overlayState = null;
 
     function setStatus(text, live) {
       statusText.textContent = text;
@@ -31,6 +43,7 @@
 
     function showOffline() {
       video.srcObject = null;
+      overlay.hidden = true;
       placeholder.style.display = "";
       placeholder.textContent = "The camera is offline right now. This page reconnects on its own.";
       setStatus("Offline");
@@ -44,6 +57,9 @@
       setStatus("Connecting…");
       // Ask the broadcaster to call us back with its stream.
       const conn = peer.connect(STREAM_ID, { reliable: true });
+      conn.on("data", msg => {
+        if (msg && msg.type === "overlay") { overlayState = msg; applyOverlay(msg); }
+      });
       conn.on("close", () => { showOffline(); scheduleRetry(); });
       conn.on("error", () => { showOffline(); scheduleRetry(); });
     }
@@ -61,6 +77,7 @@
         video.srcObject = stream;
         placeholder.style.display = "none";
         setStatus("Live", true);
+        if (overlayState) applyOverlay(overlayState);
       });
       call.on("close", () => { showOffline(); scheduleRetry(); });
     });
