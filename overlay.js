@@ -99,7 +99,7 @@
           for (let i = 0; i < 9; i++) l.cur.m[i] += (t.m[i] - l.cur.m[i]) * EASE;
         }
         const m = l.cur.m; // columns: head's right, down and forward axes
-        const px = l.cur.f * style.size / 16;
+        const px = l.cur.f * style.size / 32;
         l.el.style.fontSize = px + "px";
         l.el.style.transform =
           `translate(${l.cur.x}px, ${l.cur.y}px) translate(-50%, -100%) perspective(${px * 25}px) ` +
